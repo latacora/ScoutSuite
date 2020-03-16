@@ -15,6 +15,24 @@ class CloudStorageFacade:
     async def get_buckets(self, project_id: str):
         try:
             client = storage.Client(project=project_id)
+            buckets = await run_concurrently(lambda: list(client.list_buckets()))
+            if len(buckets) == 0:
+                print("No buckets were discovered in project: " + project_id)
+                return []
+            semaphore = asyncio.Semaphore(value=2)
+            await asyncio.wait([self.semaWorker(semaphore, bucket) for bucket in buckets])
+
+            #await get_and_set_concurrently([self._get_and_set_bucket_logging, 
+            #   self._get_and_set_bucket_iam_policy], buckets)
+            return buckets
+        except Exception as e:
+            print_exception('Failed to retrieve storage buckets: {}'.format(e))
+            return []
+
+    '''
+    async def get_buckets(self, project_id: str):
+        try:
+            client = storage.Client(project=project_id)
             buckets = list(client.list_buckets())
             numb_buckets=len(buckets)
             if numb_buckets == 0:
@@ -30,7 +48,7 @@ class CloudStorageFacade:
         except Exception as e:
            print_exception('Failed to retrieve storage buckets:{}: {}'.format(project_id,e))
            return []
-
+    '''
     """
     # ScoutSuite's original get_buckets() function
     async def get_buckets(self, project_id: str):

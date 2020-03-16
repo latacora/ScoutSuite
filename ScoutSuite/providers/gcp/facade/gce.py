@@ -2,11 +2,17 @@ from ScoutSuite.core.console import print_exception
 from ScoutSuite.providers.gcp.facade.basefacade import GCPBaseFacade
 from ScoutSuite.providers.gcp.facade.utils import GCPFacadeUtils
 from ScoutSuite.providers.utils import run_concurrently
-
+import asyncio
 
 class GCEFacade(GCPBaseFacade):
     def __init__(self):
         super(GCEFacade, self).__init__('compute', 'v1')
+        self._semaphore = asyncio.Semaphore(value=10)
+
+    async def with_semaphore(self, func):
+        async with self._semaphore:
+            return await func()
+   
 
     async def get_disks(self, project_id, zone):
         try:
@@ -29,13 +35,17 @@ class GCEFacade(GCPBaseFacade):
             return []
 
     async def get_instances(self, project_id, zone):
-        try:
+        async def get():
+        #try:
             gce_client = self._get_client()
             request = gce_client.instances().list(project=project_id, zone=zone)
             instances_group = gce_client.instances()
             instances = await GCPFacadeUtils.get_all('items', request, instances_group)
             await self._add_metadata(project_id, instances)
             return instances
+
+        try:
+            return await self.with_semaphore(get)
         except Exception as e:
             print_exception('Failed to retrieve compute instances: {}'.format(e))
             return []
